@@ -21,12 +21,16 @@ public class ConverterConfig
 
     private static final Pattern flagPattern = Pattern.compile("^--?.+$");
 
-    private final List<FileObject> files = new ArrayList<>();
+    private final List<FileObject> xmlFiles = new ArrayList<>();
+
+    private final List<FileObject> propFiles = new ArrayList<>();
 
     private String workingDir = System.getProperty("user.dir");
     private boolean inPlace = false;
 
     private boolean findAll = false;
+
+    private String convertPropertiesPattern = null;
 
     public static ConverterConfig fromArgs(String[] args)
         throws FileNotFoundException, FileSystemException {
@@ -73,6 +77,12 @@ public class ConverterConfig
                     }
                     config.workingDir = value.get();
                     break;
+                case "-p":
+                case "--properties":
+                case "--convert-properties":
+                    config.convertPropertiesPattern = value
+                        .orElse(".*/log4j(?!2).*\\.properties");
+                    break;
                 default:
                     System.err.println("Unknown option: " + flag);
                     printHelp();
@@ -84,62 +94,78 @@ public class ConverterConfig
             .filter(flagPattern.asPredicate().negate()).distinct().collect(
                 Collectors.toList());
 
-        try {
-            if (!config.findAll) {
-                if (nonFlagArgs.isEmpty()) {
-                    System.err.println(
-                        "input file(s) must be specified if --find-all "
-                            + "is not used");
-                    printHelp();
-                    System.exit(1);
-                }
-                if (!config.inPlace && nonFlagArgs.size() > 1) {
-                    System.out.println(
-                        "multiple files are specified, so --in-place is activated");
-                    config.inPlace = true;
-                }
-                // Interpret args as file(s)
-                nonFlagArgs.forEach(file -> {
-                    try {
-                        final FileObject fileObject = fileSystemManager.resolveFile(
-                            file, fileSystemOptions);
-                        if (fileObject.exists() && fileObject.isFile()) {
-                            config.files.add(fileObject);
-                        } else {
-                            System.err.println("File not found: " + file);
-                        }
-                    } catch (FileSystemException e) {
-                        throw new RuntimeException(e);
-                    }
-                });
-            } else {
-                // Search for patterns in current dir
-                final FileObject curDir = fileSystemManager.resolveFile(
-                    config.getWorkingDir(), fileSystemOptions);
-                List<String> patterns = new ArrayList<>(nonFlagArgs);
-                if (patterns.isEmpty()) {
-                    // Use default pattern
-                    patterns.add(".*/log4j(?!2).*\\.xml");
-                }
-                patterns.forEach(pattern -> {
-                    try {
-                        Arrays.stream(
-                                curDir.findFiles(new PatternFileSelector(pattern)))
-                            .forEach(fileObject -> {
-                                try {
-                                    if (fileObject.isFile())
-                                        config.files.add(fileObject);
-                                } catch (FileSystemException e) {
-                                    throw new RuntimeException(e);
-                                }
-                            });
-                    } catch (FileSystemException e) {
-                        throw new RuntimeException(e);
-                    }
-                });
+        if (!config.findAll) {
+            if (nonFlagArgs.isEmpty()) {
+                System.err.println(
+                    "input file(s) must be specified if --find-all "
+                        + "is not used");
+                printHelp();
+                System.exit(1);
             }
-        } finally {
-//            fileSystemManager.close();
+            if (!config.inPlace && nonFlagArgs.size() > 1) {
+                System.out.println(
+                    "multiple files are specified, so --in-place is activated");
+                config.inPlace = true;
+            }
+            // Interpret args as file(s)
+            nonFlagArgs.forEach(file -> {
+                try {
+                    final FileObject fileObject = fileSystemManager.resolveFile(
+                        file, fileSystemOptions);
+                    if (fileObject.exists() && fileObject.isFile()) {
+                        config.xmlFiles.add(fileObject);
+                    } else {
+                        System.err.println("File not found: " + file);
+                    }
+                } catch (FileSystemException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        } else {
+            // Search for patterns in current dir
+            final FileObject curDir = fileSystemManager.resolveFile(
+                config.getWorkingDir(), fileSystemOptions);
+            List<String> patterns = new ArrayList<>(nonFlagArgs);
+            if (patterns.isEmpty()) {
+                // Use default pattern
+                patterns.add(".*/log4j(?!2).*\\.xml");
+            }
+            patterns.forEach(pattern -> {
+                try {
+                    Arrays.stream(
+                            curDir.findFiles(new PatternFileSelector(pattern)))
+                        .forEach(fileObject -> {
+                            try {
+                                if (fileObject.isFile())
+                                    config.xmlFiles.add(fileObject);
+                            } catch (FileSystemException e) {
+                                throw new RuntimeException(e);
+                            }
+                        });
+                } catch (FileSystemException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        }
+
+        if (config.getConvertPropertiesPattern() != null) {
+            final FileObject curDir = fileSystemManager.resolveFile(
+                config.getWorkingDir(), fileSystemOptions);
+            try {
+                Arrays.stream(
+                        curDir.findFiles(new PatternFileSelector(
+                            config.getConvertPropertiesPattern())))
+                    .forEach(fileObject -> {
+                        try {
+                            if (fileObject.isFile())
+                                config.propFiles.add(fileObject);
+                        } catch (FileSystemException e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
+            } catch (FileSystemException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         return config;
@@ -157,12 +183,16 @@ public class ConverterConfig
         System.out.println("--wd=<path>, --working-directory=<path>\t\tSet working directory, default is the current directory, only relevant for -a");
     }
 
-    public List<FileObject> getFiles() {
-        return files;
+    public List<FileObject> getXmlFiles() {
+        return xmlFiles;
     }
 
     public Boolean isInPlace() {
         return inPlace;
+    }
+
+    public List<FileObject> getPropFiles() {
+        return propFiles;
     }
 
     public Boolean isFindAll() {
@@ -171,5 +201,9 @@ public class ConverterConfig
 
     public String getWorkingDir() {
         return workingDir;
+    }
+
+    public String getConvertPropertiesPattern() {
+        return convertPropertiesPattern;
     }
 }

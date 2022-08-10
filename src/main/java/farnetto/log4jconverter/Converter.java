@@ -6,7 +6,12 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
+import javax.script.ScriptContext;
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+import javax.script.SimpleScriptContext;
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Unmarshaller;
@@ -15,10 +20,14 @@ import javax.xml.parsers.SAXParserFactory;
 import javax.xml.transform.sax.SAXSource;
 
 import farnetto.log4jconverter.jaxb.Appender;
+import farnetto.log4jconverter.jaxb.Level;
 import org.apache.commons.vfs2.FileSystemException;
 import org.apache.commons.vfs2.VFS;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.python.core.PyObject;
+import org.python.core.PyString;
+import org.python.util.PythonInterpreter;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 import org.xml.sax.XMLReader;
@@ -64,13 +73,27 @@ public class Converter
      */
     public void convert(ConverterConfig config)
     {
-        config.getFiles().parallelStream().forEach(file -> {
+        config.getXmlFiles().parallelStream().forEach(file -> {
             try {
                 OutputStream log4j2Output = System.out;
                 if (config.isInPlace()) {
-                    String outFileName = file.getName().getParent().getPath() + File.separator +
-                        file.getName().getBaseName().replaceAll("log4j", "log4j2");
-                    log4j2Output = new FileOutputStream(outFileName);
+                    String outFileDir = file.getName().getParent().getPath() +
+                        File.separator;
+                    String newBaseName = file.getName().getBaseName();
+                    if (newBaseName.contains("log4j")) {
+                        newBaseName = newBaseName.replaceFirst("log4j", "log4j2");
+                    } else {
+                        newBaseName = newBaseName.replaceAll(
+                            "^(.+?)(\\.\\w+)?$", "$12$2");
+                    }
+                    // Check if file already exists
+                    if (new File(outFileDir + newBaseName).exists()) {
+                        newBaseName = newBaseName.replaceAll(
+                            "^(.+?)(\\.\\w+)?$",
+                            "$1." + System.currentTimeMillis() + "$2");
+                    }
+                    log4j2Output = Files.newOutputStream(
+                        Paths.get(outFileDir, newBaseName));
                 }
                 File log4jInput = new File(file.getName().getPath());
 
@@ -82,10 +105,50 @@ public class Converter
 
                 parseXml(log4jInput, log4j2Output, comments);
             } catch (Exception e) {
-                System.err.println("Could not convert file '" +
+                System.err.println("Could not convert .xml file '" +
                     file.getName().getPath() + "' - reason: " + e.getMessage());
             }
         });
+
+        // TODO: Fix props conversion using python script
+//        Properties p = new Properties();
+//        p.setProperty("python.path", "./"); // Sets the module path
+//
+//        PythonInterpreter.initialize(System.getProperties(), p, new String[] {});
+//
+//        config.getPropFiles().stream().forEach(file -> {
+//            try {
+//                StringWriter writer = new StringWriter();
+//                ScriptContext context = new SimpleScriptContext();
+//                context.setWriter(writer);
+//
+//                ScriptEngineManager manager = new ScriptEngineManager();
+//                ScriptEngine engine = manager.getEngineByName("python");
+//
+//
+//                engine.eval(new FileReader(resolvePythonScriptPath("hello.py")), context);
+//                assertEquals("Should contain script output: ", "Hello Baeldung Readers!!", writer.toString().trim());
+
+//                try (PythonInterpreter pyInterp = new PythonInterpreter()) {
+//                    System.out.println("---------------> " + file.getName().getPath());
+//                    StringWriter output = new StringWriter();
+//                    pyInterp.setOut(output);
+//
+//                    pyInterp.set();
+//                    pyInterp.execfile("properties-converter.py");
+////                    pyInterp.exec("x = 10+10");
+//                    pyInterp.exec("from 'properties-converter.py' import *");
+//                    PyObject func = pyInterp.get("properties-converter");
+//                    func.__call__(new PyString(file.getName().getPath()));
+//                    String converted = output.toString();
+//                    System.out.println(converted);
+//                }
+//
+//            } catch (Exception e) {
+//                System.err.println("Could not convert .properties file '" +
+//                    file.getName().getPath() + "' - reason: " + e.getMessage());
+//            }
+//        });
     }
 
     /**

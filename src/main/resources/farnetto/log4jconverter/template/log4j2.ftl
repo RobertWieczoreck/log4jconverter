@@ -42,6 +42,8 @@ ${comments.log4jconfiguration!}
                 </#if>
             </#list>
         </Console>
+        <#elseif appender.clazz == "org.apache.log4j.varia.NullAppender">
+        <Null name="${appender.name}" />
         <#elseif appender.clazz == "org.apache.log4j.AsyncAppender">
         <Async name="${appender.name}"<@consoletarget appender/>>
             <#list appender.appenderRef as appenderRef>
