@@ -57,10 +57,18 @@ for s in lines:
             g = "jcs"
         if g == "Farnetto.Monitor":
             g = "Monitor"
-        print("logger." + g + ".name=" + g)
-        print("logger." + g + ".additivity=false")
-        print("logger." + g + ".level" + s[s.find('='):s.find(',')])
-        print("logger." + g + ".appenderRef." + g + ".ref=" + s[s.find(',')+2:])
+        name = g;
+        # make a proper identifier for the logger
+        g = g.replace(".", "_")
+        # convert FATAL to ERROR
+        s = s.replace("=FATAL", "=ERROR")
+        # print("#debug: s   =" + s)
+        # print("#debug: g   =" + g)
+        # print("#debug: name=" + name)
+        print("logger." + g + ".name=" + name)
+        #print("logger." + g + ".additivity=false")
+        print("logger." + g + ".level" + s[s.find('='):])
+        #print("logger." + g + ".appenderRef." + g + ".ref=" + s[s.find(',')+2:])
         print
     
     if not skip and s.find("rootLogger") != -1:
